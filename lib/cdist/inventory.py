@@ -20,8 +20,23 @@
 #
 #
 
+import cdist
+import os
+import re
+
+
+def validate_network(name):
+    return re.match(r".*/[0-9]*", name)
 
 def cli(args):
     """Command line handling"""
+
+    base_dir = "/home/users/nico/p/cdist/core/conf/inventory"
+
     if args.network_add:
-        print("Adding network %s" % args.network_add)
+        network = args.network_add
+        if validate_network(network):
+            print("Adding network %s" % network)
+            os.makedirs(base_dir)
+        else:
+            print("Invalid network name: %s (expected <addr>/<mask>)" % network)
