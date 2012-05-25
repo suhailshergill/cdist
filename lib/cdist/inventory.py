@@ -25,8 +25,9 @@ import os
 import re
 
 
-def validate_network(name):
-    return re.match(r".*/[0-9]*", name)
+def split_network_name(name):
+    if not re.match(r".*/[0-9]*", name):
+        raise cdist.Error("Invalid network name: %s (expected <addr>/<mask>)" % network)
 
 def cli(args):
     """Command line handling"""
@@ -35,8 +36,9 @@ def cli(args):
 
     if args.network_add:
         network = args.network_add
-        if validate_network(network):
-            print("Adding network %s" % network)
-            os.makedirs(base_dir)
+        address, mask = split_network_name(network)
+        print("Adding network %s with mask %s" % (network, mask))
+        network_path = os.path.join(base_dir, address)
+
+        os.makedirs(base_dir)
         else:
-            print("Invalid network name: %s (expected <addr>/<mask>)" % network)

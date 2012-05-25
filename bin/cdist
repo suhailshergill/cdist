@@ -30,7 +30,8 @@ def commandline():
 
     # Construct parser others can reuse
     parser = {}
-    # Options _all_ parsers have in common
+
+    # Loglevel: Parent parser for most parsers
     parser['loglevel'] = argparse.ArgumentParser(add_help=False)
     parser['loglevel'].add_argument('-d', '--debug',
         help='Set log level to debug', action='store_true',
@@ -38,6 +39,11 @@ def commandline():
     parser['loglevel'].add_argument('-v', '--verbose',
         help='Set log level to info, be more verbose',
         action='store_true', default=False)
+
+    parser['homedir'] = argparse.ArgumentParser(add_help=False)
+    parser['homedir'].add_argument('-c', '--cdist-home',
+         help='Change cdist home (default: .. from bin directory)',
+         action='store')
 
     # Main subcommand parser
     parser['main'] = argparse.ArgumentParser(description='cdist ' + cdist.VERSION,
@@ -53,12 +59,10 @@ def commandline():
     parser['banner'].set_defaults(func=cdist.banner.banner)
 
     # Config and install (common stuff)
-    parser['configinstall'] = argparse.ArgumentParser(add_help=False)
+    parser['configinstall'] = argparse.ArgumentParser(add_help=False,
+        parents=[parser['loglevel'], parser['homedir']])
     parser['configinstall'].add_argument('host', nargs='+',
         help='one or more hosts to operate on')
-    parser['configinstall'].add_argument('-c', '--cdist-home',
-         help='Change cdist home (default: .. from bin directory)',
-         action='store')
     parser['configinstall'].add_argument('-i', '--initial-manifest', 
          help='Path to a cdist manifest or \'-\' to read from stdin.',
          dest='manifest', required=False)
@@ -71,13 +75,21 @@ def commandline():
 
     # Config
     parser['config'] = parser['sub'].add_parser('config',
-        parents=[parser['loglevel'], parser['configinstall']])
+        parents=[parser['configinstall']])
     parser['config'].set_defaults(func=config)
 
     # Install
     parser['install'] = parser['sub'].add_parser('install',
-        parents=[parser['loglevel'], parser['configinstall']])
+        parents=[parser['configinstall']])
     parser['install'].set_defaults(func=install)
+
+    # Inventory
+    parser['inventory'] = parser['sub'].add_parser('inventory',
+        parents=[parser['loglevel']])
+    parser['inventory'].add_argument('--network-add',
+         help='Add network (<address>/<mask> syntax)',
+         action='store')
+    parser['inventory'].set_defaults(func=inventory)
 
     for p in parser:
         parser[p].epilog = "Get cdist at http://www.nico.schottelius.org/software/cdist/"
@@ -98,6 +110,10 @@ def config(args):
 
 def install(args):
     configinstall(args, mode=cdist.install.Install)
+
+def inventory(args):
+    import cdist.inventory
+    cdist.inventory.cli(args)
 
 def configinstall(args, mode):
     """Configure or install remote system"""

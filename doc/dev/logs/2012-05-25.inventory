@@ -22,6 +22,8 @@ cdist inventory
 
     --network-del <network address>/<mask>
 
+    --network-list
+
     --report
     --report-type text | html
     --report-destination - | file-or-dirname
