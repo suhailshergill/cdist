@@ -1,0 +1,28 @@
+cdist inventory
+    --host-add <name>
+        --ipv4 <addr>   | --gen-ipv4
+            # Adds IPv4 address and checks that a network exists
+        --network <network> 
+            # Needed, if --gen-ipv4
+        --mac <mac>     | --gen-mac
+            # Specify or generate (random?) mac => mac prefix = qemu
+        --tag <tag>
+            # Tag to be added, may be used multiple times
+
+    --host-list
+        # Output: host mac ipv4
+
+    --host-del <name>
+        # Saves ipv4 in network as unused
+        # Saves mac in macpool
+
+
+    --network-add <network address>/<mask>
+        --tag <tag>
+
+    --network-del <network address>/<mask>
+
+    --report
+    --report-type text | html
+    --report-destination - | file-or-dirname
+
