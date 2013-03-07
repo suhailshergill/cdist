@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 #
 # 2010-2011 Steven Armstrong (steven-cdist at armstrong.cc)
+# 2012 Nico Schottelius (nico-cdist at schottelius.org)
 #
 # This file is part of cdist.
 #
@@ -36,23 +37,27 @@ my_dir = op.abspath(op.dirname(__file__))
 fixtures = op.join(my_dir, 'fixtures')
 add_conf_dir = op.join(fixtures, 'conf')
 
-
 class AutorequireTestCase(test.CdistTestCase):
 
     def setUp(self):
         self.orig_environ = os.environ
         os.environ = os.environ.copy()
-        self.target_host = 'localhost'
         self.temp_dir = self.mkdtemp()
-        os.environ['__cdist_out_dir'] = self.temp_dir
+
+        self.out_dir = os.path.join(self.temp_dir, "out")
+        self.remote_out_dir = os.path.join(self.temp_dir, "remote")
+
+        os.environ['__cdist_out_dir'] = self.out_dir
+        os.environ['__cdist_remote_out_dir'] = self.remote_out_dir
 
         self.context = cdist.context.Context(
             target_host=self.target_host,
-            remote_copy='/bin/true',
-            remote_exec='/bin/true',
-            add_conf_dirs=add_conf_dir,
+            remote_copy=self.remote_copy,
+            remote_exec=self.remote_exec,
+            add_conf_dirs=[add_conf_dir],
             exec_path=test.cdist_exec_path,
             debug=False)
+
         self.config = config.Config(self.context)
 
     def tearDown(self):
@@ -60,10 +65,10 @@ class AutorequireTestCase(test.CdistTestCase):
         shutil.rmtree(self.temp_dir)
 
     def test_implicit_dependencies(self):
-        self.context.initial_manifest = os.path.join(self.config.local.manifest_path, 'implicit_dependencies')
+        self.context.initial_manifest = os.path.join(self.context.local.manifest_path, 'implicit_dependencies')
         self.config.stage_prepare()
 
-        objects = core.CdistObject.list_objects(self.config.local.object_path, self.config.local.type_path)
+        objects = core.CdistObject.list_objects(self.context.local.object_path, self.context.local.type_path)
         dependency_resolver = resolver.DependencyResolver(objects)
         expected_dependencies = [
             dependency_resolver.objects['__package_special/b'],
@@ -74,7 +79,13 @@ class AutorequireTestCase(test.CdistTestCase):
         self.assertEqual(resolved_dependencies, expected_dependencies)
 
     def test_circular_dependency(self):
-        self.context.initial_manifest = os.path.join(self.config.local.manifest_path, 'circular_dependency')
+        self.context.initial_manifest = os.path.join(self.context.local.manifest_path, 'circular_dependency')
+        self.config.stage_prepare()
+        # raises CircularDependecyError
+        self.config.stage_run()
+
+    def test_recursive_type(self):
+        self.context.initial_manifest = os.path.join(self.config.local.manifest_path, 'recursive_type')
         self.config.stage_prepare()
         # raises CircularDependecyError
         self.config.stage_run()

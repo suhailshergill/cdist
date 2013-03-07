@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
-# 2010-2011 Nico Schottelius (nico-cdist at schottelius.org)
+# 2010-2012 Nico Schottelius (nico-cdist at schottelius.org)
 #
 # This file is part of cdist.
 #
@@ -38,7 +38,7 @@ class Context(object):
         remote_copy,
         remote_exec,
         initial_manifest=False,
-        add_conf_dirs=[],
+        add_conf_dirs=None,
         exec_path=sys.argv[0],
         debug=False):
 
@@ -87,6 +87,6 @@ class Context(object):
     def filter(self, record):
         """Add hostname to logs via logging Filter"""
 
-        record.msg = self.target_host + ": " + record.msg
+        record.msg = self.target_host + ": " + str(record.msg)
 
         return True
