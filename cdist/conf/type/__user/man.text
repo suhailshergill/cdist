@@ -26,8 +26,6 @@ home::
    see above
 gid::
    see above
-groups::
-   see above
 password::
    see above
 shell::
@@ -54,6 +52,7 @@ __user foobar --uid 1001 --shell /bin/zsh --home /home/foobar
 SEE ALSO
 --------
 - cdist-type(7)
+- usermod(8) or pw(8)
 
 
 COPYING

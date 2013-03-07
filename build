@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# 2011 Nico Schottelius (nico-cdist at schottelius.org)
+# 2011-2012 Nico Schottelius (nico-cdist at schottelius.org)
 #
 # This file is part of cdist.
 #
@@ -27,15 +27,17 @@
 #set -e
 
 basedir=${0%/*}
-version=$(git describe)
+version=$(cd "$basedir" && git describe)
 
 # Manpage and HTML
 A2XM="a2x -f manpage --no-xmllint -a encoding=UTF-8"
 A2XH="a2x -f xhtml --no-xmllint -a encoding=UTF-8"
 
 # Developer webbase
-WEBDIR=$HOME/niconetz
-WEBBASE=$WEBDIR/software/cdist
+WEBDIR=$HOME/www.nico.schottelius.org
+WEBBLOG=$WEBDIR/blog
+WEBTOPDIR=$WEBDIR/software
+WEBBASE=$WEBTOPDIR/cdist
 WEBMAN=$WEBBASE/man/$version
 WEBPAGE=${WEBBASE}.mdwn
 
@@ -88,6 +90,18 @@ case "$1" in
         ${MANDIR}/cdist-reference.text.sh
     ;;
 
+    man-pub)
+        $0 man
+
+        version=$($0 changelog-version)
+
+        rm -rf "${WEBMAN}"
+        mkdir -p "${WEBMAN}/man1" "${WEBMAN}/man7"
+        cp ${MAN1DSTDIR}/*.html ${MAN1DSTDIR}/*.css ${WEBMAN}/man1 
+        cp ${MAN7DSTDIR}/*.html ${MAN7DSTDIR}/*.css ${WEBMAN}/man7
+        cd ${WEBMAN} && git add . && git commit -m "Cdist Manpage update: $version"
+    ;;
+
     dist)
         set -e
         # Do the checks
@@ -106,11 +120,20 @@ case "$1" in
         # Update website (includes documentation)
         $0 web
 
+        # Update manpages on website
+        $0 man-pub
+
+        # update git repos
         $0 pub
 
+        $0 dist-blog
         $0 dist-freecode
+        $0 dist-ml
+        $0 dist-manual
+    ;;
 
-        $0 dist-post
+    changelog-changes)
+        awk -F: 'BEGIN { start=0 } { if ($0 ~ /^[[:digit:]]/) { if(start == 0) {start = 1 } else { exit } } else { if(start==1) {print $0 }}  }' "$basedir/docs/changelog"
     ;;
 
     changelog-version)
@@ -144,15 +167,78 @@ case "$1" in
 
     ;;
 
-    dist-post)
+    blog)
+        version=$($0 changelog-version)
+        blogfile=$WEBBLOG/cdist-${version}-released.mdwn
+        cat << eof > "$blogfile"
+[[!meta title="Cdist $version released"]]
+
+Here's a short overview about the changes found in this release:
+
+eof
+
+        $0 changelog-changes >> "$blogfile"
+
+        cat << eof >> "$blogfile"
+For more information visit the [[cdist homepage|software/cdist]].
+
+[[!tag cdist config unix]]
+eof
+    ;;
+
+    dist-blog)
+        $0 blog
+        version=$($0 changelog-version)
+        file=cdist-${version}-released.mdwn
+        cd "$WEBBLOG"
+        git add "$file"
+        git commit -m "New cdist version (blogentry): $version" "$file"
+        git push
+    ;;
+
+    dist-ml)
+        $0 blog
+        version=$($0 changelog-version)
+        to_a=cdist
+        to_d=l.schottelius.org
+        to=${to_a}@${to_d}
+
+        from_a=nico-cdist
+        from_d=schottelius.org
+        from=${from_a}@${from_d}
+
+        ( 
+        cat << eof
+From: Nico -telmich- Schottelius <$from>
+To: cdist mailing list <$to>
+Subject: cdist $version released
+
+Hello .*,
+
+cdist $version has been released with the following changes:
+
+eof
+
+        "$0" changelog-changes
+        cat << eof
+
+Cheers,
+
+Nico
+
+-- 
+Automatisation at its best level. With cdist.
+eof
+        ) | /usr/sbin/sendmail -f "$from" "$to"
+    ;;
+
+
+    dist-manual)
         cat << notes
 
     To be done manually...
     
-        - freecode release
-        - blog entry
         - linkedin entry
-        - mailinglist update
 notes
 
     ;;
@@ -245,24 +331,17 @@ eof
         done
     ;;
         
-    webmain)
-        cp README ${WEBPAGE}
-        cd ${WEBDIR} && git commit -m "cdist main update" ${WEBPAGE}
-        cd ${WEBDIR} && make pub
+    web-doc)
+        rsync -av "${basedir}/docs/web/" "${WEBTOPDIR}"
+
+        cd "${WEBDIR}" && git add "${WEBBASE}"
+        cd "${WEBDIR}" && git commit -m "cdist update" "${WEBBASE}" "${WEBPAGE}"
+        cd "${WEBDIR}" && make pub
     ;;
 
     web)
-        cp README ${WEBPAGE}
-        rm -rf ${WEBMAN}
-        mkdir -p ${WEBMAN}/man1 ${WEBMAN}/man7
-
-        cp ${MAN1DSTDIR}/*.html ${MAN1DSTDIR}/*.css ${WEBMAN}/man1 
-        cp ${MAN7DSTDIR}/*.html ${MAN7DSTDIR}/*.css ${WEBMAN}/man7
-        
-        cd ${WEBDIR} && git add ${WEBBASE}
-        cd ${WEBDIR} && git commit -m "cdist update" ${WEBBASE} ${WEBPAGE}
-        cd ${WEBDIR} && make pub
-
+        set -e
+        "$0" web-doc
         # Fix ikiwiki, which does not like symlinks for pseudo security
         ssh tee.schottelius.org \
           "cd /home/services/www/nico/www.nico.schottelius.org/www/software/cdist/man &&
@@ -270,7 +349,7 @@ eof
     ;;
 
      p|pu|pub)
-          for remote in "" github sf ethz; do
+          for remote in "" github sf; do
                 echo "Pushing to $remote"
                 git push --mirror $remote
           done

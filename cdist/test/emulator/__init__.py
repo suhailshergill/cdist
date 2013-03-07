@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 #
 # 2010-2011 Steven Armstrong (steven-cdist at armstrong.cc)
+# 2012 Nico Schottelius (nico-cdist at schottelius.org)
 #
 # This file is part of cdist.
 #
@@ -19,6 +20,7 @@
 #
 #
 
+import io
 import os
 import shutil
 import string
@@ -33,90 +35,79 @@ from cdist import core
 from cdist import config
 import cdist.context
 
+import os.path as op
+my_dir = op.abspath(op.dirname(__file__))
+fixtures = op.join(my_dir, 'fixtures')
+conf_dir = op.join(fixtures, 'conf')
+
 class EmulatorTestCase(test.CdistTestCase):
 
     def setUp(self):
-        self.orig_environ = os.environ
-        os.environ = os.environ.copy()
         self.temp_dir = self.mkdtemp()
         handle, self.script = self.mkstemp(dir=self.temp_dir)
         os.close(handle)
-        self.target_host = 'localhost'
         out_path = self.temp_dir
+
         self.local = local.Local(
             target_host=self.target_host,
             out_path=out_path,
-            exec_path=test.cdist_exec_path)
+            exec_path=test.cdist_exec_path,
+            add_conf_dirs=[conf_dir])
         self.local.create_files_dirs()
-        self.env = {
-            'PATH': "%s:%s" % (self.local.bin_path, os.environ['PATH']),
-            '__target_host': self.target_host,
-            '__global': self.local.out_path,
-            '__cdist_type_base_path': self.local.type_path, # for use in type emulator
-            '__manifest': self.local.manifest_path,
-            '__cdist_manifest': self.script,
-        }
+
+        self.manifest = core.Manifest(self.target_host, self.local)
+        self.env = self.manifest.env_initial_manifest(self.script)
 
     def tearDown(self):
-        os.environ = self.orig_environ
         shutil.rmtree(self.temp_dir)
 
     def test_nonexistent_type_exec(self):
         argv = ['__does-not-exist']
-        os.environ.update(self.env)
-        self.assertRaises(core.NoSuchTypeError, emulator.Emulator, argv)
+        self.assertRaises(core.NoSuchTypeError, emulator.Emulator, argv, env=self.env)
 
     def test_nonexistent_type_requirement(self):
         argv = ['__file', '/tmp/foobar']
-        os.environ.update(self.env)
-        os.environ['require'] = '__does-not-exist/some-id'
-        emu = emulator.Emulator(argv)
+        self.env['require'] = '__does-not-exist/some-id'
+        emu = emulator.Emulator(argv, env=self.env)
         self.assertRaises(core.NoSuchTypeError, emu.run)
 
     def test_illegal_object_id_requirement(self):
         argv = ['__file', '/tmp/foobar']
-        os.environ.update(self.env)
-        os.environ['require'] = '__file/bad/id/with/.cdist/inside'
-        emu = emulator.Emulator(argv)
+        self.env['require'] = '__file/bad/id/with/.cdist/inside'
+        emu = emulator.Emulator(argv, env=self.env)
         self.assertRaises(core.IllegalObjectIdError, emu.run)
 
     def test_missing_object_id_requirement(self):
         argv = ['__file', '/tmp/foobar']
-        os.environ.update(self.env)
-        os.environ['require'] = '__file'
-        emu = emulator.Emulator(argv)
+        self.env['require'] = '__file'
+        emu = emulator.Emulator(argv, env=self.env)
         self.assertRaises(core.IllegalObjectIdError, emu.run)
 
     def test_singleton_object_requirement(self):
         argv = ['__file', '/tmp/foobar']
-        os.environ.update(self.env)
-        os.environ['require'] = '__issue'
-        emu = emulator.Emulator(argv)
+        self.env['require'] = '__issue'
+        emu = emulator.Emulator(argv, env=self.env)
         emu.run()
         # if we get here all is fine
 
     def test_requirement_pattern(self):
         argv = ['__file', '/tmp/foobar']
-        os.environ.update(self.env)
-        os.environ['require'] = '__file/etc/*'
-        emu = emulator.Emulator(argv)
+        self.env['require'] = '__file/etc/*'
+        emu = emulator.Emulator(argv, env=self.env)
         # if we get here all is fine
 
-
-import os.path as op
-my_dir = op.abspath(op.dirname(__file__))
-fixtures = op.join(my_dir, 'fixtures')
 
 class AutoRequireEmulatorTestCase(test.CdistTestCase):
 
     def setUp(self):
         self.temp_dir = self.mkdtemp()
-        self.target_host = 'localhost'
-        out_path = self.temp_dir
+        out_path = os.path.join(self.temp_dir, "out")
+
         self.local = local.Local(
             target_host=self.target_host,
             out_path=out_path,
-            exec_path=test.cdist_exec_path)
+            exec_path=test.cdist_exec_path,
+            add_conf_dirs=[conf_dir])
         self.local.create_files_dirs()
         self.manifest = core.Manifest(self.target_host, self.local)
 
@@ -137,7 +128,6 @@ class ArgumentsTestCase(test.CdistTestCase):
 
     def setUp(self):
         self.temp_dir = self.mkdtemp()
-        self.target_host = 'localhost'
         out_path = self.temp_dir
         handle, self.script = self.mkstemp(dir=self.temp_dir)
         os.close(handle)
@@ -145,17 +135,12 @@ class ArgumentsTestCase(test.CdistTestCase):
         self.local = local.Local(
             target_host=self.target_host,
             out_path=out_path,
-            exec_path=test.cdist_exec_path)
+            exec_path=test.cdist_exec_path,
+            add_conf_dirs=[conf_dir])
         self.local.create_files_dirs()
 
-        self.env = {
-            'PATH': "%s:%s" % (self.local.bin_path, os.environ['PATH']),
-            '__target_host': self.target_host,
-            '__global': self.local.out_path,
-            '__cdist_type_base_path': self.local.type_path, # for use in type emulator
-            '__manifest': self.local.manifest_path,
-            '__cdist_manifest': self.script,
-        }
+        self.manifest = core.Manifest(self.target_host, self.local)
+        self.env = self.manifest.env_initial_manifest(self.script)
 
     def tearDown(self):
         shutil.rmtree(self.temp_dir)
@@ -208,7 +193,7 @@ class ArgumentsTestCase(test.CdistTestCase):
 #        argv = [type_name, object_id, '--required1', value]
 #        os.environ.update(self.env)
 #        emu = emulator.Emulator(argv)
-#        
+#
 #        self.assertRaises(SystemExit, emu.run)
 
     def test_optional(self):
@@ -232,38 +217,59 @@ class StdinTestCase(test.CdistTestCase):
     def setUp(self):
         self.orig_environ = os.environ
         os.environ = os.environ.copy()
-        self.target_host = 'localhost'
-        self.temp_dir = self.mkdtemp()
-        os.environ['__cdist_out_dir'] = self.temp_dir
 
-        self.context = cdist.context.Context(
+        self.temp_dir = self.mkdtemp()
+        out_path = os.path.join(self.temp_dir, "out")
+
+        self.local = local.Local(
             target_host=self.target_host,
-            remote_copy='scp -o User=root -q',
-            remote_exec='ssh -o User=root -q',
+            out_path=out_path,
             exec_path=test.cdist_exec_path,
-            debug=False)
-        self.config = config.Config(self.context)
+            add_conf_dirs=[conf_dir])
+
+        self.local.create_files_dirs()
+
+        self.manifest = core.Manifest(
+            target_host=self.target_host,
+            local = self.local)
 
     def tearDown(self):
         os.environ = self.orig_environ
         shutil.rmtree(self.temp_dir)
 
     def test_file_from_stdin(self):
-        handle, destination = self.mkstemp(dir=self.temp_dir)
-        os.close(handle)
-        source_handle, source = self.mkstemp(dir=self.temp_dir)
-        candidates = string.ascii_letters+string.digits
-        with os.fdopen(source_handle, 'w') as fd:
-            for x in range(100):
-                fd.write(''.join(random.sample(candidates, len(candidates))))
+        """
+        Test whether reading from stdin works
+        """
 
-        handle, initial_manifest = self.mkstemp(dir=self.temp_dir)
-        with os.fdopen(handle, 'w') as fd:
-            fd.write('__file_from_stdin %s --source %s\n' % (destination, source))
-        self.context.initial_manifest = initial_manifest
-        self.config.stage_prepare()
+        ######################################################################
+        # Create string with random content
+        random_string = str(random.sample(range(1000), 800))
+        random_buffer = io.BytesIO(bytes(random_string, 'utf-8'))
 
-        cdist_type = core.CdistType(self.config.local.type_path, '__file')
-        cdist_object = core.CdistObject(cdist_type, self.config.local.object_path, destination)
-        # Test weither stdin has been stored correctly
-        self.assertTrue(filecmp.cmp(source, os.path.join(cdist_object.absolute_path, 'stdin')))
+        ######################################################################
+        # Prepare required args and environment for emulator
+        type_name = '__file'
+        object_id = "cdist-test-id"
+        argv = [type_name, object_id]
+
+        initial_manifest_path = "/cdist-test/path/that/does/not/exist"
+        env = self.manifest.env_initial_manifest(initial_manifest_path)
+
+        ######################################################################
+        # Create path where stdin should reside at
+        cdist_type = core.CdistType(self.local.type_path, type_name)
+        cdist_object = core.CdistObject(cdist_type, self.local.object_path, object_id)
+        stdin_out_path = os.path.join(cdist_object.absolute_path, 'stdin')
+
+        ######################################################################
+        # Run emulator
+        emu = emulator.Emulator(argv, stdin=random_buffer, env=env)
+        emu.run()
+
+        ######################################################################
+        # Read where emulator should have placed stdin
+        with open(stdin_out_path, 'r') as fd:
+            stdin_saved_by_emulator = fd.read()
+
+        self.assertEqual(random_string, stdin_saved_by_emulator)

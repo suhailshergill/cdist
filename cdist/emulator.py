@@ -29,16 +29,19 @@ import cdist
 from cdist import core
 
 class Emulator(object):
-    def __init__(self, argv):
+    def __init__(self, argv, stdin=sys.stdin.buffer, env=os.environ):
         self.argv           = argv
+        self.stdin          = stdin
+        self.env            = env
+
         self.object_id      = False
 
-        self.global_path    = os.environ['__global']
-        self.target_host    = os.environ['__target_host']
+        self.global_path    = self.env['__global']
+        self.target_host    = self.env['__target_host']
 
         # Internally only
-        self.object_source  = os.environ['__cdist_manifest']
-        self.type_base_path = os.environ['__cdist_type_base_path']
+        self.object_source  = self.env['__cdist_manifest']
+        self.type_base_path = self.env['__cdist_type_base_path']
 
         self.object_base_path = os.path.join(self.global_path, "object")
 
@@ -62,7 +65,7 @@ class Emulator(object):
     def run(self):
         """Emulate type commands (i.e. __file and co)"""
 
-        if '__install' in os.environ:
+        if '__install' in self.env:
             if not self.cdist_type.is_install:
                 self.log.debug("Running in install mode, ignoring non install type")
                 return True
@@ -79,7 +82,7 @@ class Emulator(object):
         logformat = '%(levelname)s: %(message)s'
         logging.basicConfig(format=logformat)
 
-        if '__cdist_debug' in os.environ:
+        if '__cdist_debug' in self.env:
             logging.root.setLevel(logging.DEBUG)
         else:
             logging.root.setLevel(logging.INFO)
@@ -132,6 +135,8 @@ class Emulator(object):
         self.parameters = {}
         for key,value in vars(self.args).items():
             if value is not None:
+                if isinstance(value, list):
+                    value = '\n'.join(value)
                 self.parameters[key] = value
 
         if self.cdist_object.exists:
@@ -146,15 +151,16 @@ class Emulator(object):
         # Record / Append source
         self.cdist_object.source.append(self.object_source)
 
-    chunk_size = 8192
+    chunk_size = 65536
     def _read_stdin(self):
-        return sys.stdin.buffer.read(self.chunk_size)
+        return self.stdin.read(self.chunk_size)
+
     def save_stdin(self):
         """If something is written to stdin, save it in the object as
         $__object/stdin so it can be accessed in manifest and gencode-*
         scripts.
         """
-        if not sys.stdin.isatty():
+        if not self.stdin.isatty():
             try:
                 # go directly to file instead of using CdistObject's api
                 # as that does not support streaming
@@ -170,8 +176,8 @@ class Emulator(object):
     def record_requirements(self):
         """record requirements"""
 
-        if "require" in os.environ:
-            requirements = os.environ['require']
+        if "require" in self.env:
+            requirements = self.env['require']
             self.log.debug("reqs = " + requirements)
             for requirement in requirements.split(" "):
                 # Ignore empty fields - probably the only field anyway
@@ -191,7 +197,7 @@ class Emulator(object):
         """An object shall automatically depend on all objects that it defined in it's type manifest.
         """
         # __object_name is the name of the object whose type manifest is currently executed
-        __object_name = os.environ.get('__object_name', None)
+        __object_name = self.env.get('__object_name', None)
         if __object_name:
             # The object whose type manifest is currently run
             parent = self.cdist_object.object_from_name(__object_name)
